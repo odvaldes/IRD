@@ -1,17 +1,39 @@
-# utils/github_api.py
 import requests
-import base64
+import os
+import tempfile
 
-def guardar_en_github(nombre_archivo, contenido, repo, token, usuario):
-    url = f"https://api.github.com/repos/{usuario}/{repo}/contents/{nombre_archivo}"
-    headers = {"Authorization": f"token {token}"}
+def descargar_archivo_desde_github(repo_url, archivo_path, token=None):
+    """
+    Descarga un archivo desde un repositorio público o privado de GitHub.
 
-    contenido_bytes = base64.b64encode(contenido.encode()).decode("utf-8")
+    Parámetros:
+    - repo_url: URL base del repositorio (por ejemplo, https://github.com/usuario/repositorio)
+    - archivo_path: ruta del archivo dentro del repositorio (por ejemplo, data/capas/capa.kmz)
+    - token: token de autenticación (si es repositorio privado)
 
-    data = {
-        "message": f"Guardar {nombre_archivo}",
-        "content": contenido_bytes
-    }
+    Retorna:
+    - ruta temporal del archivo descargado
+    """
+    try:
+        # Extraer datos del repositorio
+        repo_url = repo_url.rstrip('/')
+        user_repo = "/".join(repo_url.split("/")[-2:])
+        raw_url = f"https://raw.githubusercontent.com/{user_repo}/main/{archivo_path}"
 
-    response = requests.put(url, json=data, headers=headers)
-    return response.status_code in [201, 200]  # 200 si se reemplaza un archivo existente
+        headers = {}
+        if token:
+            headers["Authorization"] = f"token {token}"
+
+        response = requests.get(raw_url, headers=headers)
+
+        if response.status_code == 200:
+            tmp_dir = tempfile.mkdtemp()
+            archivo_local = os.path.join(tmp_dir, os.path.basename(archivo_path))
+            with open(archivo_local, 'wb') as f:
+                f.write(response.content)
+            return archivo_local
+        else:
+            raise Exception(f"Error al descargar archivo: {response.status_code} - {response.text}")
+
+    except Exception as e:
+        raise RuntimeError(f"No se pudo descargar el archivo desde GitHub: {e}")
